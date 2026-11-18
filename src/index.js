@@ -1,9 +1,15 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { toNodeHandler } from "better-auth/node";
 import { env, validateEnv } from "./config/env.js";
 import { connectDB, closeDB } from "./config/db.js";
+import { getAuth } from "./config/auth.js";
+import authRoutes from "./routes/auth.routes.js";
+import bookingRoutes from "./routes/booking.routes.js";
 import healthRoutes from "./routes/health.routes.js";
+import studioRoutes from "./routes/studio.routes.js";
+import uploadRoutes from "./routes/upload.routes.js";
 import {
   notFoundHandler,
   globalErrorHandler,
@@ -18,13 +24,11 @@ const app = express();
 app.set("trust proxy", 1);
 
 // 3. Configure CORS with credentials support for HTTPOnly cookies
-const allowedOrigins = env.CLIENT_URL.split(",").map((url) => url.trim());
-
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g., server-to-server, curl, health checks)
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || env.CLIENT_ORIGINS.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`Origin ${origin} not allowed by StudioSpace CORS`));
@@ -32,16 +36,27 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cookie", "X-CSRF-Token"],
+    maxAge: 86400,
   }),
 );
 
-// 4. Core Middleware
+// 4. Authentication
+// Express auth routes (/token, /me, /logout, /csrf, /providers) need parsed
+// cookies for CSRF/origin-protected mutations. Keep Better Auth's catch-all
+// mounted before the global JSON/body parsers so Better Auth can read the raw
+// request body when required.
+app.use(cookieParser());
+app.use("/api/auth", authRoutes);
+app.all("/api/auth/*", (req, res, next) => {
+  Promise.resolve(toNodeHandler(getAuth())(req, res)).catch(next);
+});
+
+// 5. Core Middleware
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
 
-// 5. Root Welcome Route
+// 6. Root Welcome Route
 app.get("/", (_req, res) => {
   res.status(200).json({
     success: true,
@@ -50,14 +65,17 @@ app.get("/", (_req, res) => {
   });
 });
 
-// 6. API Routes
+// 7. API Routes
 app.use("/api/health", healthRoutes);
+app.use("/api/uploads", uploadRoutes);
+app.use("/api/studios", studioRoutes);
+app.use("/api/bookings", bookingRoutes);
 
-// 7. 404 & Global Error Handlers
+// 8. 404 & Global Error Handlers
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
 
-// 8. Start Server after verifying MongoDB Connection
+// 9. Start Server after verifying MongoDB Connection
 async function startServer() {
   try {
     await connectDB();
