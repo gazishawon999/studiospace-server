@@ -8,6 +8,17 @@ let client = null;
 let dbInstance = null;
 
 /**
+ * Returns the active MongoClient (required for sessions/transactions).
+ * @returns {MongoClient}
+ */
+export function getClient() {
+  if (!client) {
+    throw new Error("Database not initialized. Call connectDB() first.");
+  }
+  return client;
+}
+
+/**
  * Connects to MongoDB Atlas using a reusable singleton instance.
  * Safe to call multiple times across requests.
  * @returns {Promise<import('mongodb').Db>}
@@ -65,7 +76,9 @@ async function ensureIndexes(db) {
       studios.createIndex({ ownerEmail: 1 }),
       studios.createIndex({ rating: -1, createdAt: -1 }),
       bookings.createIndex({ studioId: 1, bookingDate: 1, status: 1 }),
+      bookings.createIndex({ studioId: 1, bookingDate: 1, startTime: 1, endTime: 1 }),
       bookings.createIndex({ userEmail: 1, createdAt: -1 }),
+      bookings.createIndex({ userId: 1, createdAt: -1 }),
       wishlists.createIndex({ userEmail: 1, studioId: 1 }, { unique: true }),
     ]);
   } catch (indexError) {
