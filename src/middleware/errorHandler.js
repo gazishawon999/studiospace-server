@@ -8,11 +8,13 @@ export class AppError extends Error {
    * @param {string} message
    * @param {number} statusCode
    * @param {Array<string>} [errors]
+   * @param {string} [code]
    */
-  constructor(message, statusCode = 500, errors = []) {
+  constructor(message, statusCode = 500, errors = [], code = undefined) {
     super(message);
     this.statusCode = statusCode;
     this.errors = errors;
+    this.code = code;
     this.isOperational = true;
     Error.captureStackTrace(this, this.constructor);
   }
@@ -43,6 +45,7 @@ export function globalErrorHandler(err, req, res, _next) {
   res.status(statusCode).json({
     success: false,
     message,
+    code: err.code || undefined,
     errors: err.errors?.length ? err.errors : undefined,
     stack: env.NODE_ENV === "development" ? err.stack : undefined,
   });
